@@ -163,8 +163,46 @@ int main(int argc, char **argv)
  * background children don't receive SIGINT (SIGTSTP) from the kernel
  * when we type ctrl-c (ctrl-z) at the keyboard.  
 */
+
 void eval(char *cmdline) 
 {
+    //we first want to parse the cmd line -- we use parseline below
+    char *argv[MAXARGS]; //create array of pointers to chars that will be entered to cmd line 
+    char buf[MAXLINE]; //holds modified cmd line
+    pid_t pid;
+
+    //parseline returns int so we need to keep track of its values whtether bakground or foreground
+    int bg = parseline(cmdline, argv);
+
+    //if built-in cmd, we carry it out w/o making child process 
+
+    strcpy(buf, cmdline); /* copy cmdline to buf */
+    bg = parseline(buf, argv); /* function not shown here */
+
+    if(argv[0] == NULL){
+        return;   /* Ignore empty lines */
+    }
+
+     //if actual cmd, not built-in cmd   we want to fork and exact
+    if(!builtin_cmd(argv)){
+        //fork and exc child process
+        if((pid = fork()) == 0) {       /* Child runs user job */
+            if(execve(argv[0], argv, environ) < 0) {    //handle if fails: will return -1 if error
+                printf("%s: Command not found.\n", argv[0]);
+                exit(0);    //reap zombie proc
+            }
+        }
+    }
+
+    /* Parent waits for foreground job to terminate */
+    if(!bg) {
+        int status;
+        if(waitpid(pid, &status, 0) < 0)
+            unix_error("waitfg: waitpiderror");
+        }
+        else
+            printf("%d%s", pid, cmdline);
+
     return;
 }
 
@@ -231,6 +269,9 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if(strcmp("quit", argv[0]) == 0){       //when argv[0] = quit
+        exit(0); 
+    }  
     return 0;     /* not a builtin command */
 }
 
