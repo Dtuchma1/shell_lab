@@ -404,6 +404,12 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
+    pid_t pid = fgpid(jobs);
+    
+    if (pid != 0) {
+        // Sends SIGINT to every process in the same process group with pid
+        safe_kill(-pid, sig); // signals to the entire foreground process group
+    }
     return;
 }
 
