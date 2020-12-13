@@ -317,7 +317,31 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
-    return;
+    if (argv[1] == NULL) {                                      // Checks if it has second argument
+        printf("%s command requires PID or %%jobid argument\n", argv[0]);
+        return;
+    }
+    
+    if (!isdigit(argv[1][0]) && argv[1][0] != '%') {            // Checks if the second argument is valid
+        printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+        return;
+    }
+    
+    int is_job_id = (argv[1][0] == '%' ? 1 : 0);                // Checks if the second argument is refering to PID or JID
+    struct job_t *givenjob;
+    
+    if (is_job_id) { // if JID (For example, %321)
+        givenjob = getjobjid(jobs, atoi(&argv[1][1]));          // Get JID. pointer starts from the second character of second argument
+        if (givenjob == NULL) {                                 // Checks if the given JID is alive
+            printf("%s: No such job\n", argv[1]);
+            return;
+        }
+    } else {        // if PID (For example, 512)
+        givenjob = getjobpid(jobs, (pid_t) atoi(argv[1]));      // Get PID with the second argument
+        if (givenjob == NULL) {                                 // Checks if the given PID is there
+            printf("(%d): No such process\n", atoi(argv[1]));
+            return;
+        }
 }
 
 /* 
