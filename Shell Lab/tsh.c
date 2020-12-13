@@ -371,7 +371,30 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
-    return;
+    int status;  
+
+    pid_t pid;              //child pid
+
+    //WNOHANG returns immediately if no child exited. WUNTRACED gives status for proc that stop/terminate
+    while ((pid = waitpid(fgpid(jobs), &status, WNOHANG|WUNTRACED)) > 0) {      // >0 so that wait for child proc ID = pid
+        if (WIFSTOPPED(status)){        //if stopped
+            
+            getjobpid(jobs, pid)->state = ST;  //change the job state to ST(stopped)
+            int jid = pid2jid(pid);             //get JID
+            printf("Job [%d] (%d) Stopped by signal %d\n", jid, pid, WSTOPSIG(status));
+        }  
+        else if (WIFSIGNALED(status)){      //if child terminated by signal
+            
+            int jid = pid2jid(pid);         //get JID
+            printf("Job [%d] (%d) terminated by signal %d\n", jid, pid, WTERMSIG(status));
+            deletejob(jobs, pid);           //delete it
+        }  
+        else if (WIFEXITED(status)){        //if terminated normally with exit  
+            //exited
+            deletejob(jobs, pid);           //delete
+        }  
+    }  
+    return; 
 }
 
 /* 
