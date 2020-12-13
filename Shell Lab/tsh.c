@@ -166,63 +166,61 @@ int main(int argc, char **argv)
 
 void eval(char *cmdline) 
 {
-    //we first want to parse the cmd line -- we use parseline below
-
-    char *argv[MAXARGS]; //create array of pointers to chars that will be entered to cmd line 
-    //char buf[MAXLINE]; //holds modified cmd line
-    pid_t pid = -1;
+    char *argv[MAXARGS];		//create array of pointers to chars that will be entered to cmd line 
+    //int to record for bg   
+    int bg;         
+    pid_t pid;      			//Contains the process id
+    sigset_t mask;				//The signal set which has to be blocked before adding the job to 'jobs'
+    
 
     //parseline returns int so we need to keep track of its values whtether background or foreground
-    int bg = parseline(cmdline, argv);
+    bg = parseline(cmdline, argv);
 
-    //if built-in cmd,we carry it out w/o making child process 
+    //if actual cmd, not built-in cmd  we want to fork and exect
+    if(!builtin_cmd(argv)) { 
+        
+        // blocking first
+        sigemptyset(&mask);				//make empty signal set in mask
+        sigaddset(&mask, SIGCHLD);		//Add SIGCHLD to signal set for block
+        sigprocmask(SIG_BLOCK, &mask, NULL);	//Blocked the signal set
 
-    //strcpy(buf, cmdline); /* copy cmdline to buf */
-    //bg = parseline(buf, argv); /* function not shown here */
-
-    if(argv[0] == NULL) {
-        return;   /* Ignore empty lines */
-    }
-
-     //if actual cmd, not built-in cmd   we want to fork and exect
-    if(!builtin_cmd(argv)){
-
-        //need blocking ?
-
-        //fork
+        // forking
         if((pid = fork()) < 0){
             unix_error("forking error");
-        } 
-
-        // After the fork, but before the execve, the child process should call setpgid(0, 0), 
-        // which puts the child in a new process group whose group ID is identical to the childâ€™s PID. 
-        // This ensures that there will be only one process, your shell, in the foreground process group.
-        //  When you type ctrl-c, the shell should catch the resulting SIGINT and then forward it to the 
-        // appropriate foreground job (or more precisely, the process group that contains the foreground job).
-
-        // child process
-        else if(pid == 0) {       /* Child runs user job */
+        }
+        //we are at child
+        else if(pid == 0) {
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);		//Unblock the signal in child
             setpgid(0, 0);
-            if(execve(argv[0], argv, environ) < 0) {    //handle if fails: will return -1 if error
-                printf("%s: Command not found.\n", argv[0]);
-                exit(1);    //reap zombie proc
+
+                //check if cmd, handle if fails: will return -1 if error
+                if(execve(argv[0], argv, environ) < 0) {
+                    printf("%s: Command not found\n", argv[0]);
+                    exit(1);
+                }
+        } 
+        // parent adds its job first
+        else {
+            if(!bg){					 		//If process is foreground, parent waits for the job to terminate
+                addjob(jobs, pid, FG, cmdline);	//Add the process to jobs
+            }
+            else {
+                addjob(jobs, pid, BG, cmdline);
+            }
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);		//Unblock the signal set after adding the job
+            
+            //If process is fg, parent waits for the job to terminate
+            if (!bg){
+                //wait for fg
+                waitfg(pid);
+            } 
+
+			//else it must be bg
+            else {
+                printf("[%d] (%d) %s", pid2jid(pid), pid, cmdline);		//Print the details of bg job
             }
         }
-        
-	/* Parent waits for foreground job to terminate */
-	else{
-	  addjob(jobs, pid, bg ? BG : FG, cmdline);
-	  if(!bg){
-	    //wait for foreground
-	    printf("Waiting for %d\n", pid);
-	    waitfg(pid);
-	  }
-	  else
-	    printf("%d %s\n", pid, cmdline);
-        }
     }
-
-    return;
 }
 
 
