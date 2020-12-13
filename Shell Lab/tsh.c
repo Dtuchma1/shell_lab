@@ -347,6 +347,14 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    while (1) {
+        if (pid != fgpid(jobs)) {
+            if (verbose) printf("waitfg: Process (%d) no longer the fg process\n", (int) pid);
+            break;
+        } else {
+            sleep(1);
+        }
+    }
     return;
 }
 
