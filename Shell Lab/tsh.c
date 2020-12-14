@@ -2,7 +2,7 @@
  * tsh - A tiny shell program with job control
  * 
  * Dov Tuchman 800344990
- * 
+ * Noah Shafron 800505272
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -203,7 +203,7 @@ void eval(char *cmdline)
         // parent adds its job first
         else {
             if(!bg){					 		//If process is foreground, parent waits for the job to terminate
-                addjob(jobs, pid, FG, cmdline);	//Add the process to jobs
+                addjob(jobs, pid, FG, cmdline);			//Add the process to jobs
             }
             else {
                 addjob(jobs, pid, BG, cmdline);
@@ -216,7 +216,7 @@ void eval(char *cmdline)
                 waitfg(pid);
             } 
 
-			//else it must be bg
+	    //else it must be bg
             else {
                 printf("[%d] (%d) %s", pid2jid(pid), pid, cmdline);		//Print the details of bg job
             }
@@ -315,32 +315,59 @@ int builtin_cmd(char **argv)
  * do_bgfg - Execute the builtin bg and fg commands
  */
 void do_bgfg(char **argv) 
-{
-    if (argv[1] == NULL) {                                      // Checks if it has second argument
+{   
+    struct job_t *job;
+    char *tmp;
+    int jid;
+    pid_t pid;
+
+    tmp = argv[1];      //store ID value
+    
+    // if id doesn't exist
+    if(tmp == NULL) {
         printf("%s command requires PID or %%jobid argument\n", argv[0]);
         return;
     }
     
-    if (!isdigit(argv[1][0]) && argv[1][0] != '%') {            // Checks if the second argument is valid
+    // if its JID
+    if(tmp[0] == '%') {  
+        jid = atoi(&tmp[1]); 
+        job = getjobjid(jobs, jid);             //get JID
+        if(job == NULL){  
+            printf("%s: No such job\n", tmp);  
+            return;  
+        }
+        else{
+            //get the pid if a valid job for later to kill
+            pid = job->pid;
+        }
+    } 
+    // if its PID
+    else if(isdigit(tmp[0])) { 
+        pid = atoi(tmp);            //get PID
+        job = getjobpid(jobs, pid);                 //get JID 
+        if(job == NULL){            
+            printf("(%d): No such process\n", pid);  
+            return;  
+        }  
+    }  
+    //if not valid PID/JID
+    else {
         printf("%s: argument must be a PID or %%jobid\n", argv[0]);
         return;
     }
+    kill(-pid, SIGCONT);            //kill for each proc
     
-    int is_job_id = (argv[1][0] == '%' ? 1 : 0);                // Checks if the second argument is refering to PID or JID
-    struct job_t *givenjob;
-    
-    if (is_job_id) { // if JID (For example, %321)
-        givenjob = getjobjid(jobs, atoi(&argv[1][1]));          // Get JID. pointer starts from the second character of second argument
-        if (givenjob == NULL) {                                 // Checks if the given JID is alive
-            printf("%s: No such job\n", argv[1]);
-            return;
-        }
-    } else {        // if PID (For example, 512)
-        givenjob = getjobpid(jobs, (pid_t) atoi(argv[1]));      // Get PID with the second argument
-        if (givenjob == NULL) {                                 // Checks if the given PID is there
-            printf("(%d): No such process\n", atoi(argv[1]));
-            return;
-        }
+    //if fg
+    if(!strcmp("fg", argv[0])) {
+        //wait for fg
+        job->state = FG;        //set state to fg
+        waitfg(job->pid);       //wait
+    } 
+    else{
+        printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);               //print for bg
+        job->state = BG;        //set state to bg
+    } 
 }
 
 /* 
@@ -409,7 +436,7 @@ void sigint_handler(int sig)
     
     if (pid != 0) {
         // Sends SIGINT to every process in the same process group with pid
-        safe_kill(-pid, sig); // signals to the entire foreground process group
+        kill(-pid, sig); // signals to the entire foreground process group
     }
     return;
 }
@@ -421,7 +448,11 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
-    return;
+    pid_t pid = fgpid(jobs);  
+    if (pid != 0) {             //check for valid pid
+        kill(-pid, sig);  
+    }  
+    return;   
 }
 
 /*********************
