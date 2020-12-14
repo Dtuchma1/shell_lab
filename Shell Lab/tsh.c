@@ -409,7 +409,7 @@ void sigchld_handler(int sig)
             
             getjobpid(jobs, pid)->state = ST;  //change the job state to ST(stopped)
             int jid = pid2jid(pid);             //get JID
-            printf("Job [%d] (%d) Stopped by signal %d\n", jid, pid, WSTOPSIG(status));
+            printf("Job [%d] (%d) stopped by signal %d\n", jid, pid, WSTOPSIG(status));
         }  
         else if (WIFSIGNALED(status)){      //if child terminated by signal
             
